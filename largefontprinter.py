@@ -15,33 +15,33 @@ from tkinter import ttk, filedialog, messagebox, colorchooser
 from PIL import Image, ImageTk
 import io
 
-# ==================== 数据结构定义 ====================
+# ==================== Data Structure Definitions ====================
 """
-ContourPoint: 2D坐标点，tuple[float, float]
-RawContour: 原始轮廓数据，list[ContourPoint]
-ProcessedPolygon: 处理后的多边形结构 {
+ContourPoint: 2D coordinate point, tuple[float, float]
+RawContour: Raw contour data, list[ContourPoint]
+ProcessedPolygon: Processed polygon structure {
     "polygon": shapely.Polygon,
-    "is_outer": bool,   # 是否外轮廓
-    "children": list    # 嵌套子轮廓
+    "is_outer": bool,   # Whether it's an outer contour
+    "children": list    # Nested child contours
 }
 """
 
-# ==================== 自定义异常 ====================
+# ==================== Custom Exception ====================
 class FontProcessingError(Exception):
-    """字体处理专用异常"""
+    """Custom exception for font processing errors"""
     def __init__(self, message):
-        super().__init__(f"字体处理错误: {message}")
+        super().__init__(f"Font processing error: {message}")
 
-# ==================== 填充样式定义 ====================
+# ==================== Fill Style Definitions ====================
 FILL_STYLES = {
-    'solid': '纯色填充',
-    'horizontal': '水平渐变',
-    'vertical': '垂直渐变',
-    'radial': '径向渐变',
-    'crosshatch': '交叉阴影',
-    'dots': '圆点图案',
-    'lines': '平行线图案',
-    'grid': '网格图案'
+    'solid': 'Solid Fill',
+    'horizontal': 'Horizontal Gradient',
+    'vertical': 'Vertical Gradient',
+    'radial': 'Radial Gradient',
+    'crosshatch': 'Crosshatch Pattern',
+    'dots': 'Dot Pattern',
+    'lines': 'Line Pattern',
+    'grid': 'Grid Pattern'
 }
 
 PAGE_SIZES = {
@@ -54,42 +54,42 @@ PAGE_SIZES = {
     'Legal': LEGAL
 }
 
-# ==================== 轮廓采集笔 ====================
+# ==================== Contour Collection Pen ====================
 class ContourPen(BasePen):
-    """字体轮廓采集工具（继承自BasePen）"""
+    """Font contour collection tool (inherits from BasePen)"""
     def __init__(self, glyphSet):
         super().__init__(glyphSet)
         self.contours = []
         self.current_contour = []
 
     def _moveTo(self, pt):
-        """开始新轮廓路径"""
+        """Start a new contour path"""
         self.current_contour = [pt]
 
     def _lineTo(self, pt):
-        """绘制直线到指定点"""
+        """Draw a straight line to the specified point"""
         self.current_contour.append(pt)
 
     def cubic_bezier(self, t, P0, P1, P2, P3):
-        """计算三次贝塞尔曲线上的点"""
+        """Calculate point on cubic Bezier curve"""
         x = (1 - t) ** 3 * P0[0] + 3 * (1 - t) ** 2 * t * P1[0] + 3 * (1 - t) * t ** 2 * P2[0] + t ** 3 * P3[0]
         y = (1 - t) ** 3 * P0[1] + 3 * (1 - t) ** 2 * t * P1[1] + 3 * (1 - t) * t ** 2 * P2[1] + t ** 3 * P3[1]
         return (x, y)
 
     def _curveToOne(self, pt1, pt2, pt3):
-        """处理三次贝塞尔曲线"""
+        """Process cubic Bezier curve"""
         p0 = self.current_contour[-1]
         t_values = np.linspace(0, 1, 100)
         curve_points = [self.cubic_bezier(t, p0, pt1, pt2, pt3) for t in t_values]
         self.current_contour.extend(curve_points)
 
     def _closePath(self):
-        """闭合当前轮廓路径"""
+        """Close the current contour path"""
         if len(self.current_contour) > 0:
             self.contours.append(self.current_contour)
             self.current_contour = []
 
-# ==================== 字形处理器 ====================
+# ==================== Glyph Processor ====================
 class GlyphProcessor:
     def __init__(self, font_path, char, scale_factor, page_size):
         self.ttfont = TTFont(font_path)
@@ -110,11 +110,11 @@ class GlyphProcessor:
         return self._paginate(base_poly)
 
     def _apply_transform(self, points, matrix):
-        """应用仿射变换"""
+        """Apply affine transformation"""
         return [tuple(np.dot(matrix, (x, y, 1))[:2]) for x, y in points]
 
     def build_contour_hierarchy(self, contours):
-        """构建带孔洞的层级结构"""
+        """Build hierarchical structure with holes"""
         processed = []
         
         for contour in contours:
@@ -150,7 +150,7 @@ class GlyphProcessor:
         return hierarchy
 
     def build_geometry(self, hierarchy):
-        """构建几何形状"""
+        """Build geometric shape"""
         valid_polys = []
         
         for outer in hierarchy:
@@ -167,7 +167,7 @@ class GlyphProcessor:
             return unary_union([p.buffer(0) for p in valid_polys])
 
     def _paginate(self, geometry):
-        """动态分页处理"""
+        """Dynamic pagination processing"""
         minx, miny, maxx, maxy = geometry.bounds
         cols = int(np.ceil((maxx - minx) / self.page_w))
         rows = int(np.ceil((maxy - miny) / self.page_h))
@@ -188,14 +188,14 @@ class GlyphProcessor:
                     transformed = self._transform_coords(page_content, x0, y0)
                     pages.append(transformed)
         
-        # 返回一个包含所有信息的自定义对象
+        # Return a custom object containing all information
         class PageList(list):
             def __init__(self, pages, total_bounds, page_info):
                 super().__init__(pages)
                 self.total_bounds = total_bounds
                 self.page_info = page_info
         
-        # 构建页面信息列表
+        # Build page info list
         page_info_list = []
         idx = 0
         for c in range(cols):
@@ -222,7 +222,7 @@ class GlyphProcessor:
         return PageList(pages, (minx, miny, maxx, maxy), page_info_list)
 
     def _transform_coords(self, geometry, dx, dy):
-        """坐标转换到页面局部坐标系"""
+        """Transform coordinates to page local coordinate system"""
         if geometry.geom_type == 'Polygon':
             return Polygon(
                 [(x - dx, self.page_h - (y - dy)) for x, y in geometry.exterior.coords],
@@ -234,7 +234,7 @@ class GlyphProcessor:
                                  for p in geometry.geoms])
         return geometry
 
-# ==================== PDF生成器（支持多种填充方式） ====================
+# ==================== PDF Generator (Supports Multiple Fill Styles) ====================
 class PDFGenerator:
     def __init__(self, filename, page_size):
         self.canvas = canvas.Canvas(filename, pagesize=page_size)
@@ -243,12 +243,12 @@ class PDFGenerator:
     def render(self, pages, fill_style='solid', color=(1, 0, 0), 
                second_color=(0, 0, 1), pattern_density=10):
         """
-        渲染PDF页面
-        :param pages: 页面几何数据列表
-        :param fill_style: 填充样式
-        :param color: 主颜色 (RGB 0-1)
-        :param second_color: 次要颜色（用于渐变）
-        :param pattern_density: 图案密度
+        Render PDF pages
+        :param pages: List of page geometry data
+        :param fill_style: Fill style
+        :param color: Primary color (RGB 0-1)
+        :param second_color: Secondary color (for gradients)
+        :param pattern_density: Pattern density
         """
         for idx, page in enumerate(pages):
             if idx > 0:
@@ -257,7 +257,7 @@ class PDFGenerator:
         self.canvas.save()
 
     def _draw_page(self, geometry, fill_style, color, second_color, pattern_density):
-        """绘制单个页面"""
+        """Draw a single page"""
         path = self.canvas.beginPath()
         
         if geometry.geom_type == 'Polygon':
@@ -273,13 +273,13 @@ class PDFGenerator:
         self.canvas.drawPath(path, fill=1, stroke=0)
 
     def _render_polygon(self, path, polygon):
-        """渲染单个多边形"""
+        """Render a single polygon"""
         self._add_contour(path, polygon.exterior)
         for hole in polygon.interiors:
             self._add_contour(path, hole)
 
     def _add_contour(self, path, ring):
-        """添加轮廓路径"""
+        """Add contour path"""
         coords = list(ring.coords)
         path.moveTo(*coords[0])
         for pt in coords[1:]:
@@ -287,7 +287,7 @@ class PDFGenerator:
         path.close()
 
     def _apply_fill(self, fill_style, color, second_color, pattern_density):
-        """应用填充样式"""
+        """Apply fill style"""
         if fill_style == 'solid':
             self.canvas.setFillColorRGB(*color)
         
@@ -326,7 +326,7 @@ class PDFGenerator:
             self._apply_pattern_fill('grid', color, pattern_density)
 
     def _apply_pattern_fill(self, pattern_type, color, density):
-        """应用图案填充"""
+        """Apply pattern fill"""
         from reportlab.pdfgen import patterns
         pat = patterns.Pattern(612, 792)
         
@@ -356,60 +356,60 @@ class PDFGenerator:
         
         self.canvas.setFillPattern(pat)
 
-# ==================== 图形界面 ====================
+# ==================== Graphical User Interface ====================
 class BigFontPrintApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("特大字分页打印系统")
+        self.root.title("Large Character Pagination Printing System")
         self.root.geometry("900x700")
         
-        # 默认配置
+        # Default configuration
         self.config = {
             'font_path': '',
-            'char': '回',
+            'char': 'A',
             'scale_factor': 5,
             'page_size': 'A4',
             'output_file': 'output.pdf',
             'fill_style': 'solid',
-            'primary_color': (1.0, 0.0, 0.0),  # 红色
-            'secondary_color': (0.0, 0.0, 1.0),  # 蓝色
+            'primary_color': (1.0, 0.0, 0.0),  # Red
+            'secondary_color': (0.0, 0.0, 1.0),  # Blue
             'pattern_density': 10
         }
         
-        # 创建GUI
+        # Create GUI
         self.create_widgets()
         
     def create_widgets(self):
-        # 主框架
+        # Main frame
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # 左侧控制面板
+        # Left control panel
         left_panel = ttk.Frame(main_frame, width=300)
         left_panel.pack(side=tk.LEFT, fill=tk.Y, padx=5)
         
-        # 右侧预览区域
+        # Right preview area
         right_panel = ttk.Frame(main_frame)
         right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5)
         
-        # ========== 左侧控制面板 ==========
+        # ========== Left Control Panel ==========
         
-        # 字体选择
-        ttk.Label(left_panel, text="字体文件:").pack(anchor=tk.W, pady=(10, 2))
+        # Font selection
+        ttk.Label(left_panel, text="Font File:").pack(anchor=tk.W, pady=(10, 2))
         font_frame = ttk.Frame(left_panel)
         font_frame.pack(fill=tk.X)
         self.font_path_entry = ttk.Entry(font_frame)
         self.font_path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Button(font_frame, text="浏览", command=self.browse_font).pack(side=tk.RIGHT)
+        ttk.Button(font_frame, text="Browse", command=self.browse_font).pack(side=tk.RIGHT)
         
-        # 字符输入
-        ttk.Label(left_panel, text="输入字符:").pack(anchor=tk.W, pady=(10, 2))
+        # Character input
+        ttk.Label(left_panel, text="Input Character:").pack(anchor=tk.W, pady=(10, 2))
         self.char_entry = ttk.Entry(left_panel, font=('Arial', 20))
-        self.char_entry.insert(0, '回')
+        self.char_entry.insert(0, 'A')
         self.char_entry.pack(fill=tk.X)
         
-        # 缩放比例
-        ttk.Label(left_panel, text="缩放比例:").pack(anchor=tk.W, pady=(10, 2))
+        # Scale factor
+        ttk.Label(left_panel, text="Scale Factor:").pack(anchor=tk.W, pady=(10, 2))
         self.scale_label = ttk.Label(left_panel, text="5.0x")
         self.scale_slider = ttk.Scale(left_panel, from_=1, to=20, orient=tk.HORIZONTAL, 
                                       command=self.update_scale_label)
@@ -417,42 +417,42 @@ class BigFontPrintApp:
         self.scale_slider.pack(fill=tk.X)
         self.scale_label.pack(anchor=tk.W)
         
-        # 页面大小
-        ttk.Label(left_panel, text="页面大小:").pack(anchor=tk.W, pady=(10, 2))
+        # Page size
+        ttk.Label(left_panel, text="Page Size:").pack(anchor=tk.W, pady=(10, 2))
         self.page_size_combobox = ttk.Combobox(left_panel, values=list(PAGE_SIZES.keys()))
         self.page_size_combobox.set('A4')
         self.page_size_combobox.pack(fill=tk.X)
         
-        # 填充样式
-        ttk.Label(left_panel, text="填充样式:").pack(anchor=tk.W, pady=(10, 2))
+        # Fill style
+        ttk.Label(left_panel, text="Fill Style:").pack(anchor=tk.W, pady=(10, 2))
         self.fill_style_combobox = ttk.Combobox(left_panel, values=list(FILL_STYLES.values()))
-        self.fill_style_combobox.set('纯色填充')
+        self.fill_style_combobox.set('Solid Fill')
         self.fill_style_combobox.bind('<<ComboboxSelected>>', self.update_fill_options)
         self.fill_style_combobox.pack(fill=tk.X)
         
-        # 主颜色
-        ttk.Label(left_panel, text="主颜色:").pack(anchor=tk.W, pady=(10, 2))
+        # Primary color
+        ttk.Label(left_panel, text="Primary Color:").pack(anchor=tk.W, pady=(10, 2))
         color_frame = ttk.Frame(left_panel)
         color_frame.pack(fill=tk.X)
-        self.color_button = ttk.Button(color_frame, text="选择颜色", command=self.choose_primary_color)
+        self.color_button = ttk.Button(color_frame, text="Choose Color", command=self.choose_primary_color)
         self.color_button.pack(side=tk.LEFT)
         self.color_preview = ttk.Label(color_frame, width=10, background='#FF0000')
         self.color_preview.pack(side=tk.RIGHT)
         
-        # 次要颜色（渐变用）
+        # Secondary color (for gradients)
         self.secondary_color_frame = ttk.Frame(left_panel)
-        ttk.Label(self.secondary_color_frame, text="次要颜色:").pack(anchor=tk.W)
+        ttk.Label(self.secondary_color_frame, text="Secondary Color:").pack(anchor=tk.W)
         color2_frame = ttk.Frame(self.secondary_color_frame)
         color2_frame.pack(fill=tk.X)
-        self.color2_button = ttk.Button(color2_frame, text="选择颜色", command=self.choose_secondary_color)
+        self.color2_button = ttk.Button(color2_frame, text="Choose Color", command=self.choose_secondary_color)
         self.color2_button.pack(side=tk.LEFT)
         self.color2_preview = ttk.Label(color2_frame, width=10, background='#0000FF')
         self.color2_preview.pack(side=tk.RIGHT)
         self.secondary_color_frame.pack(fill=tk.X)
         
-        # 图案密度
+        # Pattern density
         self.pattern_density_frame = ttk.Frame(left_panel)
-        ttk.Label(self.pattern_density_frame, text="图案密度:").pack(anchor=tk.W, pady=(10, 2))
+        ttk.Label(self.pattern_density_frame, text="Pattern Density:").pack(anchor=tk.W, pady=(10, 2))
         self.density_label = ttk.Label(self.pattern_density_frame, text="10")
         self.density_slider = ttk.Scale(self.pattern_density_frame, from_=5, to=50, orient=tk.HORIZONTAL,
                                         command=self.update_density_label)
@@ -461,122 +461,122 @@ class BigFontPrintApp:
         self.density_label.pack(anchor=tk.W)
         self.pattern_density_frame.pack(fill=tk.X)
         
-        # 输出文件
-        ttk.Label(left_panel, text="输出文件:").pack(anchor=tk.W, pady=(10, 2))
+        # Output file
+        ttk.Label(left_panel, text="Output File:").pack(anchor=tk.W, pady=(10, 2))
         output_frame = ttk.Frame(left_panel)
         output_frame.pack(fill=tk.X)
         self.output_entry = ttk.Entry(output_frame)
         self.output_entry.insert(0, 'output.pdf')
         self.output_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Button(output_frame, text="浏览", command=self.browse_output).pack(side=tk.RIGHT)
+        ttk.Button(output_frame, text="Browse", command=self.browse_output).pack(side=tk.RIGHT)
         
-        # 生成按钮
-        ttk.Button(left_panel, text="生成PDF", command=self.generate_pdf, style='Accent.TButton').pack(
+        # Generate button
+        ttk.Button(left_panel, text="Generate PDF", command=self.generate_pdf, style='Accent.TButton').pack(
             fill=tk.X, pady=20)
         
-        # 进度标签
-        self.status_label = ttk.Label(left_panel, text="就绪", foreground='green')
+        # Status label
+        self.status_label = ttk.Label(left_panel, text="Ready", foreground='green')
         self.status_label.pack(anchor=tk.W)
         
-        # ========== 右侧预览区域 ==========
-        # 页面缩略图区域（拼图布局）
-        ttk.Label(right_panel, text="页面布局预览（点击查看详情）").pack(anchor=tk.W, pady=5)
+        # ========== Right Preview Area ==========
+        # Page thumbnail area (grid layout)
+        ttk.Label(right_panel, text="Page Layout Preview (Click for Details)").pack(anchor=tk.W, pady=5)
         self.thumbnail_frame = ttk.Frame(right_panel)
         self.thumbnail_frame.pack(fill=tk.X)
         
-        # 添加水平滚动条
+        # Horizontal scrollbar
         self.thumbnail_hscrollbar = ttk.Scrollbar(self.thumbnail_frame, orient=tk.HORIZONTAL)
         self.thumbnail_hscrollbar.pack(side=tk.BOTTOM, fill=tk.X)
         
-        # 添加垂直滚动条
+        # Vertical scrollbar
         self.thumbnail_vscrollbar = ttk.Scrollbar(self.thumbnail_frame, orient=tk.VERTICAL)
         self.thumbnail_vscrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # 添加滚动条容器（支持双向滚动）
+        # Scrollable canvas
         self.thumbnail_canvas = tk.Canvas(self.thumbnail_frame, bg='lightgray', height=180, 
                                           scrollregion=(0, 0, 1000, 1000),
                                           xscrollcommand=self.thumbnail_hscrollbar.set,
                                           yscrollcommand=self.thumbnail_vscrollbar.set)
         self.thumbnail_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
-        # 配置滚动条
+        # Configure scrollbars
         self.thumbnail_hscrollbar.configure(command=self.thumbnail_canvas.xview)
         self.thumbnail_vscrollbar.configure(command=self.thumbnail_canvas.yview)
         
-        # 详细预览区域
-        ttk.Label(right_panel, text="详细预览").pack(anchor=tk.W, pady=5)
+        # Detailed preview area
+        ttk.Label(right_panel, text="Detailed Preview").pack(anchor=tk.W, pady=5)
         self.preview_canvas = tk.Canvas(right_panel, bg='white', relief=tk.SUNKEN, borderwidth=2)
         self.preview_canvas.pack(fill=tk.BOTH, expand=True)
         
-        # 保存页面数据
+        # Save page data
         self.pages_data = []
         self.selected_page = 0
         
-        # 更新填充选项显示
+        # Update fill options display
         self.update_fill_options()
     
     def browse_font(self):
-        """浏览字体文件"""
-        path = filedialog.askopenfilename(filetypes=[('TrueType字体', '*.ttf'), ('OpenType字体', '*.otf')])
+        """Browse for font file"""
+        path = filedialog.askopenfilename(filetypes=[('TrueType Font', '*.ttf'), ('OpenType Font', '*.otf')])
         if path:
             self.font_path_entry.delete(0, tk.END)
             self.font_path_entry.insert(0, path)
     
     def browse_output(self):
-        """浏览输出文件"""
-        path = filedialog.asksaveasfilename(defaultextension='.pdf', filetypes=[('PDF文件', '*.pdf')])
+        """Browse for output file"""
+        path = filedialog.asksaveasfilename(defaultextension='.pdf', filetypes=[('PDF File', '*.pdf')])
         if path:
             self.output_entry.delete(0, tk.END)
             self.output_entry.insert(0, path)
     
     def choose_primary_color(self):
-        """选择主颜色"""
-        color = colorchooser.askcolor(title="选择主颜色")
+        """Choose primary color"""
+        color = colorchooser.askcolor(title="Choose Primary Color")
         if color[1]:
             self.config['primary_color'] = self.hex_to_rgb(color[1])
             self.color_preview.config(background=color[1])
     
     def choose_secondary_color(self):
-        """选择次要颜色"""
-        color = colorchooser.askcolor(title="选择次要颜色")
+        """Choose secondary color"""
+        color = colorchooser.askcolor(title="Choose Secondary Color")
         if color[1]:
             self.config['secondary_color'] = self.hex_to_rgb(color[1])
             self.color2_preview.config(background=color[1])
     
     def hex_to_rgb(self, hex_color):
-        """将十六进制颜色转换为RGB (0-1)"""
+        """Convert hex color to RGB (0-1)"""
         hex_color = hex_color.lstrip('#')
         return tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4))
     
     def update_scale_label(self, value):
-        """更新缩放比例标签"""
+        """Update scale factor label"""
         self.scale_label.config(text=f"{float(value):.1f}x")
     
     def update_density_label(self, value):
-        """更新图案密度标签"""
+        """Update pattern density label"""
         self.density_label.config(text=f"{int(float(value))}")
     
     def update_fill_options(self, event=None):
-        """根据填充样式显示/隐藏相关选项"""
+        """Show/hide options based on fill style"""
         style_name = self.fill_style_combobox.get()
         style_key = list(FILL_STYLES.keys())[list(FILL_STYLES.values()).index(style_name)]
         
-        # 显示/隐藏次要颜色选择（渐变需要）
+        # Show/hide secondary color (needed for gradients)
         if style_key in ['horizontal', 'vertical', 'radial']:
             self.secondary_color_frame.pack(fill=tk.X)
         else:
             self.secondary_color_frame.pack_forget()
         
-        # 显示/隐藏图案密度（图案填充需要）
+        # Show/hide pattern density (needed for patterns)
         if style_key in ['crosshatch', 'dots', 'lines', 'grid']:
             self.pattern_density_frame.pack(fill=tk.X)
         else:
             self.pattern_density_frame.pack_forget()
     
     def generate_pdf(self):
-        """生成PDF"""
+        """Generate PDF"""
         try:
-            # 获取配置
+            # Get configuration
             self.config['font_path'] = self.font_path_entry.get()
             self.config['char'] = self.char_entry.get()
             self.config['scale_factor'] = float(self.scale_slider.get())
@@ -587,24 +587,24 @@ class BigFontPrintApp:
             self.config['fill_style'] = list(FILL_STYLES.keys())[list(FILL_STYLES.values()).index(style_name)]
             self.config['pattern_density'] = int(self.density_slider.get())
             
-            # 验证输入
+            # Validate input
             if not self.config['font_path']:
-                messagebox.showerror("错误", "请选择字体文件")
+                messagebox.showerror("Error", "Please select a font file")
                 return
             
             if not self.config['char']:
-                messagebox.showerror("错误", "请输入字符")
+                messagebox.showerror("Error", "Please enter a character")
                 return
             
             if len(self.config['char']) > 1:
-                messagebox.showerror("错误", "请只输入一个字符")
+                messagebox.showerror("Error", "Please enter only one character")
                 return
             
-            # 更新状态
-            self.status_label.config(text="正在处理...", foreground='orange')
+            # Update status
+            self.status_label.config(text="Processing...", foreground='orange')
             self.root.update()
             
-            # 处理字形
+            # Process glyph
             page_size_tuple = PAGE_SIZES[self.config['page_size']]
             processor = GlyphProcessor(
                 self.config['font_path'],
@@ -615,11 +615,11 @@ class BigFontPrintApp:
             pages = processor.process()
             
             if not pages:
-                messagebox.showwarning("警告", "没有生成任何页面")
-                self.status_label.config(text="就绪", foreground='green')
+                messagebox.showwarning("Warning", "No pages generated")
+                self.status_label.config(text="Ready", foreground='green')
                 return
             
-            # 生成PDF
+            # Generate PDF
             pdf_gen = PDFGenerator(self.config['output_file'], page_size_tuple)
             pdf_gen.render(
                 pages,
@@ -629,124 +629,119 @@ class BigFontPrintApp:
                 pattern_density=self.config['pattern_density']
             )
             
-            # 更新预览
+            # Update preview
             self.update_preview(pages)
             
-            # 更新状态
-            self.status_label.config(text=f"生成成功！共 {len(pages)} 页", foreground='green')
-            messagebox.showinfo("成功", f"PDF生成成功！共 {len(pages)} 页")
+            # Update status
+            self.status_label.config(text=f"Success! Generated {len(pages)} pages", foreground='green')
+            messagebox.showinfo("Success", f"PDF generated successfully! Total pages: {len(pages)}")
             
         except Exception as e:
-            self.status_label.config(text=f"失败: {str(e)}", foreground='red')
-            messagebox.showerror("错误", f"生成失败: {str(e)}")
+            self.status_label.config(text=f"Failed: {str(e)}", foreground='red')
+            messagebox.showerror("Error", f"Generation failed: {str(e)}")
     
     def update_preview(self, pages):
-        """更新预览，包括缩略图和详细视图"""
+        """Update preview (thumbnails + detailed view)"""
         if not pages:
             return
         
-        # 保存页面数据
+        # Save page data
         self.pages_data = pages
         self.selected_page = 0
         
-        # 先绘制缩略图
+        # Draw thumbnails first
         self.draw_thumbnails(pages)
         
-        # 再绘制详细预览
+        # Draw detailed preview
         self.draw_detail_preview(pages[0], 0)
     
     def draw_thumbnails(self, pages):
-        """绘制页面缩略图（方形网格布局）"""
+        """Draw page thumbnails in grid layout"""
         canvas = self.thumbnail_canvas
         canvas.delete('all')
         
         if not pages:
             return
         
-        # 获取页面大小
+        # Get page size
         page_size_tuple = PAGE_SIZES[self.config['page_size']]
         page_w, page_h = page_size_tuple
         
-        # 获取分页时保存的额外信息
+        # Get extra info saved during pagination
         page_info_list = getattr(pages, 'page_info', [])
         total_bounds = getattr(pages, 'total_bounds', None)
         
         if not page_info_list or total_bounds is None:
-            # 如果没有保存额外信息，使用传统方法
+            # Fallback method
             self.draw_thumbnails_fallback(pages)
             return
         
         minx_all, miny_all, maxx_all, maxy_all = total_bounds
         
-        # 计算分页行列数
+        # Calculate grid columns and rows
         cols = int((maxx_all - minx_all) / page_w) + 1
         rows = int((maxy_all - miny_all) / page_h) + 1
         
-        # 确保至少有1行1列
+        # Ensure at least 1x1 grid
         cols = max(cols, 1)
         rows = max(rows, 1)
         
-        # 缩略图尺寸
+        # Thumbnail dimensions
         thumb_width = 70
         thumb_height = 60
         padding = 10
         spacing = 5
         
-        # 计算画布尺寸
+        # Calculate canvas size
         canvas_width = cols * (thumb_width + spacing) + padding * 2
         canvas_height = rows * (thumb_height + spacing) + padding * 2 + 20
         canvas.config(scrollregion=(0, 0, canvas_width, canvas_height))
         
-        # 计算页面在缩略图中的缩放比例
+        # Calculate scale for thumbnails
         thumb_page_scale_w = thumb_width / page_w * 0.9
         thumb_page_scale_h = thumb_height / page_h * 0.9
         thumb_page_scale = min(thumb_page_scale_w, thumb_page_scale_h)
         
-        # 为每个网格位置创建页面映射
+        # Create grid mapping
         grid = {}
         for info in page_info_list:
             col_idx = info['col']
             row_idx = info['row']
             grid[(row_idx, col_idx)] = info
         
-        # 按行优先顺序绘制每个缩略图
+        # Draw thumbnails in row-major order
         for row_idx in range(rows):
             for col_idx in range(cols):
-                # 计算缩略图位置
+                # Calculate thumbnail position
                 x = padding + col_idx * (thumb_width + spacing)
                 y = padding + row_idx * (thumb_height + spacing)
                 
-                # 检查是否有对应的页面数据
+                # Check if there's a page at this grid position
                 key = (row_idx, col_idx)
                 if key in grid:
                     info = grid[key]
                     page = info['page']
-                    page_idx = page_info_list.index(info)  # 获取原始索引
-                    page_minx, page_miny, page_maxx, page_maxy = info['original_bounds']
+                    page_idx = page_info_list.index(info)
                     
-                    # 创建缩略图背景（带边框）
+                    # Create thumbnail background
                     thumb_bg = canvas.create_rectangle(x, y, x + thumb_width, y + thumb_height,
                                                        fill='white', outline='gray', width=2, tags=('thumb_bg',))
                     
-                    # 绘制该页面的字形内容（页面坐标已经是局部坐标，从0开始）
+                    # Draw polygon on thumbnail
                     def draw_thumbnail_polygon(poly):
-                        # 获取多边形的所有坐标点（已经是页面局部坐标）
                         exterior_coords = list(poly.exterior.coords)
-                        
-                        # 将页面局部坐标转换到缩略图坐标
                         points = []
                         for px, py in exterior_coords:
                             nx = x + px * thumb_page_scale + thumb_width * 0.05
                             ny = y + (page_h - py) * thumb_page_scale + thumb_height * 0.05
                             points.append((nx, ny))
                         
-                        # 绘制多边形（需要至少3个点）
                         if len(points) >= 3:
                             flat_points = [coord for point in points for coord in point]
                             canvas.create_polygon(flat_points, fill=self.rgb_to_hex(self.config['primary_color']), 
                                                   outline='black', width=1)
                         
-                        # 绘制孔洞
+                        # Draw holes
                         for hole in poly.interiors:
                             hole_coords = list(hole.coords)
                             hole_points = []
@@ -765,23 +760,23 @@ class BigFontPrintApp:
                         for poly in page.geoms:
                             draw_thumbnail_polygon(poly)
                     
-                    # 添加页码标签
+                    # Add page number
                     page_number = row_idx * cols + col_idx + 1
                     canvas.create_text(x + thumb_width / 2, y + thumb_height + 15,
                                        text=f"{page_number}", fill='blue', font=('Arial', 10, 'bold'))
                     
-                    # 绑定点击事件
+                    # Bind click event
                     canvas.tag_bind(thumb_bg, '<Button-1>', lambda event, idx=page_idx: self.on_thumbnail_click(idx))
                     
-                    # 默认选中第一个页面（左上角）
+                    # Select first page by default
                     if row_idx == 0 and col_idx == 0:
                         canvas.itemconfig(thumb_bg, outline='red', width=3)
                 else:
-                    # 绘制空白占位
+                    # Draw empty placeholder
                     canvas.create_rectangle(x, y, x + thumb_width, y + thumb_height,
                                            fill='white', outline='lightgray', width=1, dash=(2, 2))
         
-        # 添加网格线
+        # Draw grid lines
         for col in range(cols + 1):
             x = padding + col * (thumb_width + spacing)
             canvas.create_line(x, padding, x, canvas_height - padding - 20, fill='lightgray', dash=(2, 2))
@@ -791,7 +786,7 @@ class BigFontPrintApp:
             canvas.create_line(padding, y, canvas_width - padding, y, fill='lightgray', dash=(2, 2))
     
     def draw_thumbnails_fallback(self, pages):
-        """回退方法：当没有额外信息时使用传统方式绘制缩略图"""
+        """Fallback thumbnail drawing method"""
         canvas = self.thumbnail_canvas
         canvas.delete('all')
         
@@ -801,7 +796,7 @@ class BigFontPrintApp:
         page_size_tuple = PAGE_SIZES[self.config['page_size']]
         page_w, page_h = page_size_tuple
         
-        # 绘制所有页面的缩略图，按顺序排列
+        # Thumbnail settings
         thumb_width = 70
         thumb_height = 60
         padding = 10
@@ -813,9 +808,7 @@ class BigFontPrintApp:
         canvas_height = rows * (thumb_height + spacing) + padding * 2 + 20
         canvas.config(scrollregion=(0, 0, canvas_width, canvas_height))
         
-        thumb_page_scale_w = thumb_width / page_w * 0.9
-        thumb_page_scale_h = thumb_height / page_h * 0.9
-        thumb_page_scale = min(thumb_page_scale_w, thumb_page_scale_h)
+        thumb_page_scale = min(thumb_width / page_w, thumb_height / page_h) * 0.9
         
         for idx, page in enumerate(pages):
             x = padding + idx * (thumb_width + spacing)
@@ -864,39 +857,37 @@ class BigFontPrintApp:
                 canvas.itemconfig(thumb_bg, outline='red', width=3)
     
     def on_thumbnail_click(self, page_idx):
-        """点击缩略图时显示详细预览"""
+        """Show detailed preview when clicking thumbnail"""
         self.selected_page = page_idx
         
-        # 更新缩略图选中状态
+        # Update selection highlight
         canvas = self.thumbnail_canvas
         for item in canvas.find_all():
             tags = canvas.gettags(item)
             if 'thumb_bg' in tags:
                 canvas.itemconfig(item, outline='gray', width=2)
         
-        # 高亮选中的缩略图
+        # Highlight selected thumbnail
         thumbnails = canvas.find_withtag('thumb_bg')
         if thumbnails:
             canvas.itemconfig(thumbnails[page_idx], outline='red', width=3)
         
-        # 更新详细预览
+        # Update detailed view
         self.draw_detail_preview(self.pages_data[page_idx], page_idx)
     
     def draw_detail_preview(self, page, page_idx):
-        """绘制详细预览"""
+        """Draw detailed page preview"""
         canvas = self.preview_canvas
-        
-        # 清空画布
         canvas.delete('all')
         
-        # 获取画布尺寸
+        # Get canvas dimensions
         canvas_w = canvas.winfo_width()
         canvas_h = canvas.winfo_height()
         
         if canvas_w <= 1 or canvas_h <= 1:
             return
         
-        # 获取页面边界
+        # Get bounds
         if page.geom_type == 'Polygon':
             minx, miny, maxx, maxy = page.bounds
         elif page.geom_type == 'MultiPolygon':
@@ -905,16 +896,16 @@ class BigFontPrintApp:
         page_w = maxx - minx
         page_h = maxy - miny
         
-        # 计算缩放比例以适应预览区域
+        # Calculate scale to fit preview area
         scale_w = canvas_w / page_w * 0.9
         scale_h = canvas_h / page_h * 0.9
         scale_factor = min(scale_w, scale_h)
         
-        # 绘制页面边框
+        # Draw page border
         canvas.create_rectangle(5, 5, canvas_w - 5, canvas_h - 5, outline='gray', dash=(2, 2))
         
-        def draw_polygon(poly, color='red'):
-            # 绘制外轮廓
+        def draw_polygon(poly):
+            # Draw exterior
             exterior_coords = list(poly.exterior.coords)
             points = []
             for x, y in exterior_coords:
@@ -925,7 +916,7 @@ class BigFontPrintApp:
             canvas.create_polygon(points, fill=self.rgb_to_hex(self.config['primary_color']), 
                                   outline='black', width=2)
             
-            # 绘制孔洞
+            # Draw holes
             for hole in poly.interiors:
                 hole_coords = list(hole.coords)
                 hole_points = []
@@ -942,12 +933,12 @@ class BigFontPrintApp:
             for poly in page.geoms:
                 draw_polygon(poly)
         
-        # 添加页数信息
+        # Add page info
         canvas.create_text(canvas_w / 2, canvas_h - 15, 
-                          text=f"第 {page_idx + 1} / {len(self.pages_data)} 页", fill='gray')
+                          text=f"Page {page_idx + 1} / {len(self.pages_data)}", fill='gray')
     
     def rgb_to_hex(self, rgb):
-        """将RGB转换为十六进制"""
+        """Convert RGB to hex color"""
         return '#%02x%02x%02x' % tuple(int(v * 255) for v in rgb)
 
 if __name__ == "__main__":
